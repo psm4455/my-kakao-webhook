@@ -1,49 +1,89 @@
 from flask import Flask, request
 import requests
 import json
+import os
+import time
 
 app = Flask(__name__)
 
-KAKAO_ACCESS_TOKEN = "yWrs880AkKfr7xohNWhRYE6nbIKhfbhXAAAAAQoXIiAAAAGWzyCIvBKZRqbpl2cW"
+# 파일에 저장된 토큰 불러오기
+def load_tokens():
+    if not os.path.exists("tokens.json"):
+        return None
+    with open("tokens.json", "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def send_kakao_message(text):
-    url = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
-    headers = {
-        "Authorization": f"Bearer {KAKAO_ACCESS_TOKEN}",
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    template = {
-        "object_type": "text",
-        "text": text,
-        "link": {
-            "web_url": "https://www.tradingview.com",
-            "mobile_web_url": "https://www.tradingview.com"
-        },
-        "button_title": "트레이딩뷰 열기"
-    }
+# 파일에 토큰 저장하기
+def save_tokens(tokens):
+    with open("tokens.json", "w", encoding="utf-8") as f:
+        json.dump(tokens, f)
 
+# 액세스 토큰 만료 시 자동 갱신
+def refresh_access_token(refresh_token):
+    url = "https://kauth.kakao.com/oauth/token"
     data = {
-        "template_object": json.dumps(template)
+        "grant_type": "refresh_token",
+        "client_id": "f37a2090d8a668183699437f586bf241",
+        "refresh_token": refresh_token
+    }
+    response = requests.post(url, data=data)
+    new_tokens = response.json()
+    print("🔄 리프레시 성공:", new_tokens)
+
+    tokens = load_tokens()
+    if "access_token" in new_tokens:
+        tokens["access_token"] = new_tokens["access_token"]
+    if "refresh_token" in new_tokens:
+        tokens["refresh_token"] = new_tokens["refresh_token"]
+    save_tokens(tokens)
+    return tokens["access_token"]
+
+# 카카오톡으로 메시지 보내기
+def send_kakao_message(msg):
+    tokens = load_tokens()
+    access_token = tokens["access_token"]
+
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    data = {
+        "template_object": json.dumps({
+            "object_type": "text",
+            "text": msg,
+            "link": {
+                "web_url": "https://www.naver.com"
+            },
+            "button_title": "확인"
+        })
     }
 
-    response = requests.post(url, headers=headers, data=data)
-    return response.status_code, response.json()
+    response = requests.post(
+        "https://kapi.kakao.com/v2/api/talk/memo/default/send",
+        headers=headers, data=data
+    )
 
-@app.route('/', methods=['POST'])
+    # 만약 액세스 토큰이 만료되었을 경우
+    if response.status_code == 401:
+        print("⛔ 토큰 만료됨. 갱신 시도...")
+        new_token = refresh_access_token(tokens["refresh_token"])
+        headers["Authorization"] = f"Bearer {new_token}"
+        response = requests.post(
+            "https://kapi.kakao.com/v2/api/talk/memo/default/send",
+            headers=headers, data=data
+        )
+
+    return response.text
+
+# 웹훅 엔드포인트
+@app.route("/", methods=["GET", "POST"])
 def webhook():
-    try:
+    if request.method == "POST":
         data = request.json
-        alert_message = data.get("message", "📢 새로운 트레이딩뷰 신호가 도착했습니다!")
-        status_code, response_data = send_kakao_message(alert_message)
-        return {
-            "result": "success",
-            "kakao_response": response_data
-        }, status_code
-    except Exception as e:
-        return {
-            "result": "error",
-            "message": str(e)
-        }, 500
+        message = data.get("message", "기본 메시지입니다.")
+        result = send_kakao_message(message)
+        return result
+    else:
+        return "✅ 카카오톡 웹훅 서버 작동 중!"
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
