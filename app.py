@@ -2,11 +2,10 @@ from flask import Flask, request, jsonify
 import requests
 import json
 import time
-import os
 
 app = Flask(__name__)
 
-# 환경 설정 (고정값으로 작성했지만 .env 파일에서 불러오도록 개선할 수도 있음)
+# 환경 설정
 KAKAO_REST_API_KEY = "f37a2090d8a668183699437f586bf241"
 KAKAO_REDIRECT_URI = "https://my-kakao-webhook.onrender.com"
 KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
@@ -70,15 +69,15 @@ def send_kakao_message(text):
     response = requests.post("https://kapi.kakao.com/v2/api/talk/memo/default/send", headers=headers, data=data)
     return response.json()
 
-# ✅ 테스트 웹훅 주소: https://my-kakao-webhook.onrender.com/send?text=Hello
-@app.route("/send")
+# ✅ POST 요청을 받아 메시지를 전송하는 웹훅 엔드포인트
+@app.route("/send", methods=["POST"])
 def send():
-    text = request.args.get("text", "📢 알림 도착!")
+    data = request.get_json()
+    text = data.get("message", "📢 알림 도착!")  # JSON body에서 메시지를 추출
     result = send_kakao_message(text)
     return jsonify(result)
 
-# ✅ 서버 작동 확인용
+# ✅ 서버 상태 확인용 기본 페이지
 @app.route("/")
 def home():
     return "카카오톡 웹훅 서버 작동 중!"
-
