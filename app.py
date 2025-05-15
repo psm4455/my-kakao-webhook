@@ -69,9 +69,13 @@ def send_kakao_message(text):
     response = requests.post("https://kapi.kakao.com/v2/api/talk/memo/default/send", headers=headers, data=data)
     return response.json()
 
-# ✅ POST 요청을 받아 메시지를 전송하는 웹훅 엔드포인트
-@app.route("/send", methods=["POST"])
+# ✅ GET과 POST 요청을 모두 처리하는 웹훅 엔드포인트
+@app.route("/send", methods=["GET", "POST"])
 def send():
+    if request.method == "GET":
+        return "✅ 이 엔드포인트는 POST 요청을 통해 메시지를 전송합니다. 예: {\"message\": \"Hello\"}"
+
+    # POST 요청 처리
     data = request.get_json()
     text = data.get("message", "📢 알림 도착!")  # JSON body에서 메시지를 추출
     result = send_kakao_message(text)
