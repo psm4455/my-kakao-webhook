@@ -76,7 +76,7 @@ def send():
         return "✅ 이 엔드포인트는 POST 요청을 통해 메시지를 전송합니다. 예: {\"message\": \"Hello\"}"
 
     # POST 요청 처리
-    data = request.get_json()
+    data = request.get_json(force=True)
     text = data.get("message", "📢 알림 도착!")  # JSON body에서 메시지를 추출
     result = send_kakao_message(text)
     return jsonify(result)
